@@ -1,0 +1,441 @@
+############################################################
+> # ADVANCED CLIENT STRESS & SUBJECTIVE DISTRESS MODEL
+  > # Mental Health Counseling Computational Modeling Project
+  > ############################################################
+> 
+  > # 1. LOAD PACKAGES
+  > 
+  > library(ggplot2)
+> library(gganimate)
+> library(gifski)
+> library(transformr)
+> 
+  > set.seed(123)
+> 
+  > ############################################################
+> # 2. CREATE SIMULATED CLIENT DATA
+  > ############################################################
+> 
+  > n <- 1000
+  > 
+    > clients <- data.frame(
+      +     sleep_hours = runif(n, 3, 10),
+      +     work_stress = runif(n, 0, 10),
+      +     social_support = runif(n, 0, 10),
+      +     exercise = runif(n, 0, 10),
+      +     coping = runif(n, 0, 10),
+      +     stressful_events = runif(n, 0, 10),
+      +     previous_stress = runif(n, 0, 10)
+      + )
+    > 
+      > # Generate stress using weighted variables,
+      > # nonlinear effects, and interactions.
+      > 
+      > clients$true_stress <-
+        +     45 +
+        +     3.0 * (8 - clients$sleep_hours) +
+        +     5.0 * (clients$work_stress - 5) +
+        +     3.0 * (5 - clients$social_support) +
+        +     1.5 * (5 - clients$exercise) +
+        +     3.0 * (5 - clients$coping) +
+        +     4.5 * (clients$stressful_events - 3) +
+        +     3.0 * (clients$previous_stress - 5) +
+        +     0.5 * clients$work_stress *
+        +     (10 - clients$coping) +
+        +     rnorm(n, 0, 5)
+      > 
+        > # Keep stress within a 0-100 range.
+        > 
+        > clients$true_stress <- pmin(
+          +     100, pmax(0, clients$true_stress)
+          + )
+        > 
+          > # Subjective distress is generated as a related,
+          > # but separate, outcome.
+          > 
+          > clients$distress <- pmin(
+            +     100,
+            +     pmax(
+              +         0,
+              +         8 + 0.82 * clients$true_stress +
+                +             rnorm(n, 0, 6)
+              +     )
+            + )
+          > 
+            > ############################################################
+          > # 3. DIVIDE DATA INTO TRAINING AND TESTING GROUPS
+            > ############################################################
+          > 
+            > train_index <- sample(
+              +     1:n,
+              +     size = 0.80 * n
+              + )
+            > 
+              > training_data <- clients[train_index, ]
+              > testing_data <- clients[-train_index, ]
+              > 
+                > ############################################################
+              > # 4. BUILD ADVANCED STRESS PREDICTION MODEL
+                > ############################################################
+              > 
+                > stress_model <- lm(
+                  +     true_stress ~
+                    +         sleep_hours +
+                    +         work_stress +
+                    +         social_support +
+                    +         exercise +
+                    +         coping +
+                    +         stressful_events +
+                    +         previous_stress +
+                    +         I(sleep_hours^2) +
+                    +         I(work_stress * coping),
+                  +     data = training_data
+                  + )
+                > 
+                  > # Predict stress in the testing group.
+                  > 
+                  > testing_data$predicted_stress <- predict(
+                    +     stress_model,
+                    +     newdata = testing_data
+                    + )
+                  > 
+                    > testing_data$predicted_stress <- pmin(
+                      +     100,
+                      +     pmax(0, testing_data$predicted_stress)
+                      + )
+                    > 
+                      > ############################################################
+                    > # 5. BUILD SUBJECTIVE DISTRESS PREDICTION MODEL
+                      > ############################################################
+                    > 
+                      > distress_model <- lm(
+                        +     distress ~ true_stress,
+                        +     data = training_data
+                        + )
+                      > 
+                        > # Use predicted stress to estimate distress.
+                        > 
+                        > testing_data$predicted_distress <- predict(
+                          +     distress_model,
+                          +     newdata = data.frame(
+                            +         true_stress = testing_data$predicted_stress
+                            +     )
+                          + )
+                        > 
+                          > testing_data$predicted_distress <- pmin(
+                            +     100,
+                            +     pmax(0, testing_data$predicted_distress)
+                            + )
+                          > 
+                            > ############################################################
+                          > # 6. EVALUATE MODEL PERFORMANCE
+                            > ############################################################
+                          > 
+                            > rmse <- function(actual, predicted) {
+                              +     sqrt(mean((actual - predicted)^2))
+                              + }
+                            > 
+                              > r_squared <- function(actual, predicted) {
+                                +     1 - sum((actual - predicted)^2) /
+                                  +         sum((actual - mean(actual))^2)
+                                + }
+                              > 
+                                > cat("\nSTRESS MODEL PERFORMANCE\n")
+                              
+                              STRESS MODEL PERFORMANCE
+                              > 
+                                > cat(
+                                  +     "Stress RMSE:",
+                                  +     round(
+                                    +         rmse(
+                                      +             testing_data$true_stress,
+                                      +             testing_data$predicted_stress
+                                      +         ), 2
+                                    +     ), "\n"
+                                  + )
+                              Stress RMSE: 6.66 
+                              > 
+                                > cat(
+                                  +     "Stress R-squared:",
+                                  +     round(
+                                    +         r_squared(
+                                      +             testing_data$true_stress,
+                                      +             testing_data$predicted_stress
+                                      +         ), 3
+                                    +     ), "\n"
+                                  + )
+                              Stress R-squared: 0.94 
+                              > 
+                                > cat("\nDISTRESS MODEL PERFORMANCE\n")
+                              
+                              DISTRESS MODEL PERFORMANCE
+                              > 
+                                > cat(
+                                  +     "Distress RMSE:",
+                                  +     round(
+                                    +         rmse(
+                                      +             testing_data$distress,
+                                      +             testing_data$predicted_distress
+                                      +         ), 2
+                                    +     ), "\n"
+                                  + )
+                              Distress RMSE: 7.93 
+                              > 
+                                > cat(
+                                  +     "Distress R-squared:",
+                                  +     round(
+                                    +         r_squared(
+                                      +             testing_data$distress,
+                                      +             testing_data$predicted_distress
+                                      +         ), 3
+                                    +     ), "\n"
+                                  + )
+                              Distress R-squared: 0.881 
+                              > 
+                                > ############################################################
+                              > # 7. DISPLAY MODEL COEFFICIENTS
+                                > ############################################################
+                              > 
+                                > cat("\nSTRESS MODEL COEFFICIENTS\n")
+                              
+                              STRESS MODEL COEFFICIENTS
+                              > print(summary(stress_model))
+                              
+                              Call:
+                                lm(formula = true_stress ~ sleep_hours + work_stress + social_support + 
+                                     exercise + coping + stressful_events + previous_stress + 
+                                     I(sleep_hours^2) + I(work_stress * coping), data = training_data)
+                              
+                              Residuals:
+                                Min      1Q  Median      3Q     Max 
+                              -38.744  -4.777   0.893   5.605  20.109 
+                              
+                              Coefficients:
+                                Estimate Std. Error t value Pr(>|t|)    
+                              (Intercept)             56.84381    3.44203  16.515  < 2e-16 ***
+                                sleep_hours              0.31369    1.01958   0.308  0.75842    
+                              work_stress              5.81961    0.19998  29.100  < 2e-16 ***
+                                social_support          -2.60754    0.09877 -26.399  < 2e-16 ***
+                                exercise                -1.28011    0.09703 -13.193  < 2e-16 ***
+                                coping                  -4.30318    0.20195 -21.308  < 2e-16 ***
+                                stressful_events         3.64918    0.10035  36.364  < 2e-16 ***
+                                previous_stress          2.30577    0.10051  22.941  < 2e-16 ***
+                                I(sleep_hours^2)        -0.21867    0.07816  -2.798  0.00527 ** 
+                                I(work_stress * coping)  0.03179    0.03542   0.898  0.36970    
+                              ---
+                                Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+                              
+                              Residual standard error: 8.035 on 790 degrees of freedom
+                              Multiple R-squared:  0.9125,	Adjusted R-squared:  0.9115 
+                              F-statistic: 914.9 on 9 and 790 DF,  p-value: < 2.2e-16
+                              
+                              > 
+                                > cat("\nDISTRESS MODEL COEFFICIENTS\n")
+                              
+                              DISTRESS MODEL COEFFICIENTS
+                              > print(summary(distress_model))
+                              
+                              Call:
+                                lm(formula = distress ~ true_stress, data = training_data)
+                              
+                              Residuals:
+                                Min       1Q   Median       3Q      Max 
+                              -18.9057  -3.9900  -0.1227   3.9813  19.6505 
+                              
+                              Coefficients:
+                                Estimate Std. Error t value Pr(>|t|)    
+                              (Intercept) 7.788793   0.558669   13.94   <2e-16 ***
+                                true_stress 0.819681   0.007661  107.00   <2e-16 ***
+                                ---
+                                Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+                              
+                              Residual standard error: 5.848 on 798 degrees of freedom
+                              Multiple R-squared:  0.9348,	Adjusted R-squared:  0.9348 
+                              F-statistic: 1.145e+04 on 1 and 798 DF,  p-value: < 2.2e-16
+                              
+                              > 
+                                > ############################################################
+                              > # 8. SIMULATE ONE CLIENT OVER 60 DAYS
+                                > ############################################################
+                              > 
+                                > days <- 60
+                              > 
+                                > client_path <- data.frame(
+                                  +     day = 1:days
+                                  + )
+                              > 
+                                > # Create changing client circumstances.
+                                > 
+                                > client_path$sleep_hours <-
+                                +     7.2 + sin((1:days) / 6) +
+                                +     rnorm(days, 0, 0.4)
+                              > 
+                                > client_path$work_stress <-
+                                +     5 + 2 * sin((1:days) / 5) +
+                                +     rnorm(days, 0, 0.6)
+                              > 
+                                > client_path$social_support <-
+                                +     6 + 1.5 * cos((1:days) / 8) +
+                                +     rnorm(days, 0, 0.5)
+                              > 
+                                > client_path$exercise <-
+                                +     5 + 2 * sin((1:days) / 9) +
+                                +     rnorm(days, 0, 0.5)
+                              > 
+                                > client_path$coping <-
+                                +     5 + 2 * cos((1:days) / 10) +
+                                +     rnorm(days, 0, 0.5)
+                              > 
+                                > client_path$stressful_events <-
+                                +     4 + 2 * sin((1:days) / 4) +
+                                +     rnorm(days, 0, 0.5)
+                              > 
+                                > client_path$previous_stress <-
+                                +     5 + 2 * sin((1:days) / 7)
+                              > 
+                                > # Keep variables within reasonable limits.
+                                > 
+                                > variables <- c(
+                                  +     "sleep_hours",
+                                  +     "work_stress",
+                                  +     "social_support",
+                                  +     "exercise",
+                                  +     "coping",
+                                  +     "stressful_events",
+                                  +     "previous_stress"
+                                  + )
+                              > 
+                                > client_path[variables] <- lapply(
+                                  +     client_path[variables],
+                                  +     function(x) pmin(10, pmax(0, x))
+                                  + )
+                              > 
+                                > ############################################################
+                              > # 9. PREDICT THE CLIENT'S STRESS AND DISTRESS
+                                > ############################################################
+                              > 
+                                > client_path$predicted_stress <- predict(
+                                  +     stress_model,
+                                  +     newdata = client_path
+                                  + )
+                              > 
+                                > client_path$predicted_stress <- pmin(
+                                  +     100,
+                                  +     pmax(0, client_path$predicted_stress)
+                                  + )
+                              > 
+                                > client_path$predicted_distress <- predict(
+                                  +     distress_model,
+                                  +     newdata = data.frame(
+                                    +         true_stress = client_path$predicted_stress
+                                    +     )
+                                  + )
+                              > 
+                                > client_path$predicted_distress <- pmin(
+                                  +     100,
+                                  +     pmax(0, client_path$predicted_distress)
+                                  + )
+                              > 
+                                > ############################################################
+                              > # 10. CREATE ANIMATION DATA
+                                > ############################################################
+                              > 
+                                > animation_data <- rbind(
+                                  +     data.frame(
+                                    +         day = client_path$day,
+                                    +         score = client_path$predicted_stress,
+                                    +         category = "Predicted Client Stress"
+                                    +     ),
+                                  +     data.frame(
+                                    +         day = client_path$day,
+                                    +         score = client_path$predicted_distress,
+                                    +         category = "Predicted Subjective Distress"
+                                    +     )
+                                  + )
+                              > 
+                                > ############################################################
+                              > # 11. CREATE ADVANCED ANIMATED GRAPH
+                                > ############################################################
+                              > 
+                                > stress_animation <- ggplot(
+                                  +     animation_data,
+                                  +     aes(
+                                    +         x = day,
+                                    +         y = score,
+                                    +         color = category,
+                                    +         group = category
+                                    +     )
+                                  + ) +
+                                +     
+                                +     geom_hline(
+                                  +         yintercept = 70,
+                                  +         linetype = "dashed",
+                                  +         color = "gray50",
+                                  +         linewidth = 0.8
+                                  +     ) +
+                                +     
+                                +     geom_line(
+                                  +         linewidth = 1.5
+                                  +     ) +
+                                +     
+                                +     geom_point(
+                                  +         size = 2
+                                  +     ) +
+                                +     
+                                +     scale_color_manual(
+                                  +         values = c(
+                                    +             "Predicted Client Stress" = "#E76F51",
+                                    +             "Predicted Subjective Distress" = "#457B9D"
+                                    +         )
+                                  +     ) +
+                                +     
+                                +     scale_x_continuous(
+                                  +         limits = c(1, days),
+                                  +         breaks = seq(0, 60, 10)
+                                  +     ) +
+                                +     
+                                +     scale_y_continuous(
+                                  +         limits = c(0, 100),
+                                  +         breaks = seq(0, 100, 10)
+                                  +     ) +
+                                +     
+                                +     labs(
+                                  +         title = "CLIENT STRESS PREDICTION SYSTEM",
+                                  +         subtitle = "Simulated Client Progress | Day {frame_along}",
+                                  +         x = "Time (Days)",
+                                  +         y = "Predicted Score (0-100)",
+                                  +         color = "Prediction",
+                                  +         caption = paste(
+                                    +             "Dashed line = illustrative high-score threshold.",
+                                    +             "Synthetic demonstration data; not a clinical assessment."
+                                    +         )
+                                  +     ) +
+                                +     
+                                +     theme_minimal(base_size = 14) +
+                                +     
+                                +     theme(
+                                  +         plot.title = element_text(
+                                    +             face = "bold",
+                                    +             size = 20
+                                    +         ),
+                                  +         plot.subtitle = element_text(size = 13),
+                                  +         legend.position = "bottom",
+                                  +         panel.grid.minor = element_blank()
+                                  +     ) +
+                                +     
+                                +     transition_reveal(day)
+                              > 
+                                > ############################################################
+                              > # 12. EXPORT ANIMATED GIF
+                                > ############################################################
+                              > 
+                                > animate(
+                                  +     stress_animation,
+                                  +     nframes = 120,
+                                  +     fps = 12,
+                                  +     width = 1200,
+                                  +     height = 750,
+                                  +     renderer = gifski_renderer(
+                                    +         "client_stress_prediction.gif"
+                                    +     )
+                                  + )
